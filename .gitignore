@@ -1,0 +1,11 @@
+# Ne pas suivre les résultats d'expériences 
+output/
+*.csv
+*.png
+
+# Fichiers temporaires 
+__pycache__/
+*.pyc
+
+# VS Code / IDE
+.vscode/
