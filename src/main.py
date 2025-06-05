@@ -1,5 +1,3 @@
-#test test
-
 import tkinter as tk
 from tkinter import messagebox, filedialog, ttk
 import matplotlib.pyplot as plt
@@ -86,6 +84,14 @@ class IVAppCC:
         self.save_png_check = tk.Checkbutton(root, text="Save plot as PNG", variable=self.save_png_var)
         self.save_png_check.grid(row=10, column=0, columnspan=3, sticky="w", padx=5)
 
+        # Output directory at project root (not in src)
+        self.output_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'output'))
+        os.makedirs(self.output_dir, exist_ok=True)
+        self.folder_label = tk.Label(root, text=f"Output directory: {self.output_dir}")
+        self.folder_label.grid(row=14, column=0, columnspan=2, sticky="w", padx=5, pady=(5, 0))
+        self.folder_button = tk.Button(root, text="Change...", command=self.choose_output_dir)
+        self.folder_button.grid(row=14, column=2, sticky="e", padx=5, pady=(5, 0))
+
         # Start and Stop buttons
         self.start_button = tk.Button(root, text="Start Sweep", command=self.start_sweep_thread)
         self.start_button.grid(row=11, column=0, columnspan=2, pady=10)
@@ -114,6 +120,12 @@ class IVAppCC:
         # Bind Enter and Escape keys
         self.root.bind('<Return>', self.on_enter)
         self.root.bind('<Escape>', self.on_escape)
+
+    def choose_output_dir(self):
+        new_dir = filedialog.askdirectory(initialdir=os.getcwd(), title="Choose output directory")
+        if new_dir:
+            self.output_dir = new_dir
+            self.folder_label.config(text=f"Output directory: {self.output_dir}")
 
     def on_enter(self, event):
         if not self.sweep_running:
@@ -377,11 +389,9 @@ class IVAppCC:
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             base_filename = f"IV_Sweep_{timestamp}"
-            output_dir = "output"
-            os.makedirs(output_dir, exist_ok=True)
 
             if self.save_csv_var.get():
-                csv_path = os.path.join(output_dir, f"{base_filename}.csv")
+                csv_path = os.path.join(self.output_dir, f"{base_filename}.csv")
                 with open(csv_path, mode='w', newline='') as file:
                     writer = csv.writer(file)
                     writer.writerow(["Current (A)", "Voltage (V)", "Power (W)"])
@@ -390,7 +400,7 @@ class IVAppCC:
                 print(f"Data saved to {csv_path}")
 
             if self.save_png_var.get():
-                png_path = os.path.join(output_dir, f"{base_filename}.png")
+                png_path = os.path.join(self.output_dir, f"{base_filename}.png")
                 self.figure.savefig(png_path)
                 print(f"Plot saved to {png_path}")
 

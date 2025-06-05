@@ -64,7 +64,7 @@ If no real device is connected, the GUI offers a **simulated BK8601** to allow o
 ## 🧑‍💻 Author
 
 **Mathieu Martinent**  
-Electrical & Control Engineering Student – ENSEA  
+Electrical Engineering Student – ENSEA  
 [LinkedIn] www.linkedin.com/in/mathieu-martinent
 
 ---
