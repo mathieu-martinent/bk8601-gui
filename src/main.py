@@ -253,7 +253,7 @@ class IVAppCC:
                         getattr(self, attr).remove()
                     except Exception:
                         pass
-                    delattr(self, attr)
+                    delattr(self, attr)         
 
             self.ax.set_xlabel("Voltage (V)" if selected_mode == "CV" else "Current (A)")
             self.ax.set_ylabel("Current (A)" if selected_mode == "CV" else "Voltage (V)", color='b')
