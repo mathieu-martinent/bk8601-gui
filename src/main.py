@@ -239,15 +239,13 @@ class IVAppCC:
                 self.figure.delaxes(self.ax2)
             self.ax2 = self.ax.twinx()
 
-            if hasattr(self, 'line_power'):
-                self.line_power.remove()
-                del self.line_power
+            # Always set axis labels right after clearing
+            self.ax.set_xlabel("Voltage (V)")
+            self.ax.set_ylabel("Current (A)", color='b')
+            self.ax2.set_ylabel("Power (W)", color='r')
 
-            self.line_iv, = self.ax.plot([], [], 'b-o', label="I-V Curve")
-            self.line_power, = self.ax2.plot([], [], 'r--', label="Power Curve")
-
-            # Safely remove previous annotations/points
-            for attr in ['pmp_annotation', 'pmp_point', 'vmp_annotation', 'vmp_point', 'summary_annotation']:
+            # Remove previous plot lines and annotations if they exist
+            for attr in ['line_iv', 'line_power', 'pmp_annotation', 'pmp_point', 'vmp_annotation', 'vmp_point', 'summary_annotation']:
                 if hasattr(self, attr):
                     try:
                         getattr(self, attr).remove()
@@ -255,8 +253,8 @@ class IVAppCC:
                         pass
                     delattr(self, attr)         
 
-            self.ax.set_xlabel("Voltage (V)" if selected_mode == "CV" else "Current (A)")
-            self.ax.set_ylabel("Current (A)" if selected_mode == "CV" else "Voltage (V)", color='b')
+            self.ax.set_xlabel("Voltage (V)")
+            self.ax.set_ylabel("Current (A)", color='b')
             self.ax.tick_params(axis='y', labelcolor='b')
             self.ax.grid(True)
             self.ax2.yaxis.set_label_position("right")
@@ -296,8 +294,15 @@ class IVAppCC:
                     voltages.append(voltage)
                     powers.append(power)
 
-                    self.line_iv.set_data(voltages, currents)
-                    self.line_power.set_data(voltages, powers)
+                    if hasattr(self, 'line_iv'):
+                        self.line_iv.remove()
+                        del self.line_iv
+                    self.line_iv, = self.ax.plot(voltages, currents, label="I-V Curve", color='blue')
+
+                    if hasattr(self, 'line_power'):
+                        self.line_power.remove()
+                        del self.line_power
+                    self.line_power, = self.ax2.plot(voltages, powers, label="P-V Curve", color='red')
 
                     self.ax.relim()
                     self.ax.autoscale_view()
@@ -315,8 +320,12 @@ class IVAppCC:
             load.write("INPUT OFF")
             load.close()
 
+            # Swap axes: Voltage (V) on X, Current (A) on Y
             self.line_iv.set_data(voltages, currents)
             self.line_power.set_data(voltages, powers)
+            self.ax.set_xlabel("Voltage (V)")
+            self.ax.set_ylabel("Current (A)", color='b')
+            self.ax2.set_ylabel("Power (W)", color='r')
             self.ax.relim()
             self.ax.autoscale_view()
             self.ax2.relim()
@@ -460,19 +469,17 @@ class IVAppCC:
                 Vt = 0.7
 
                 if "MEAS:VOLT?" in command:
+                    # In CC mode, given current, return voltage
                     if self.state["FUNC"] == "CURR":
                         I = self.state["current"]
-                        V = 0
-                        for v_try in [x * Voc / 100.0 for x in range(101)]:
-                            i_try = Isc * (1 - math.exp((v_try - Voc) / (n * Vt)))
-                            if i_try <= I:
-                                V = v_try
-                                break
+                        # Calculate V for given I (numerically invert the diode equation)
+                        V = Voc + n * Vt * math.log(1 - I / Isc) if I < Isc else 0
                         if self.state["VOLT_PROT_ON"] and self.state["VOLT_PROT"] is not None and V > self.state["VOLT_PROT"]:
                             return str(self.state["VOLT_PROT"] + 5)
-                        return str(V)
+                        return str(max(V, 0))
                     return str(self.state["voltage"])
                 elif "MEAS:CURR?" in command:
+                    # In CV mode, given voltage, return current
                     if self.state["FUNC"] == "VOLT":
                         V = self.state["voltage"]
                         I = Isc * (1 - math.exp((V - Voc) / (n * Vt)))
