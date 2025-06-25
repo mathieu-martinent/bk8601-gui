@@ -429,7 +429,7 @@ class IVAppCC:
                     max_len = max(len(currents), len(params))
                     for idx in range(max_len):
                         row = []
-                        # Add measurement if it exists
+                        # Add measurement if it exists (no apostrophe)
                         if idx < len(currents):
                             row.extend([currents[idx], voltages[idx], powers[idx]])
                         else:
