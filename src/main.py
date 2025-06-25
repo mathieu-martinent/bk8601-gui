@@ -216,8 +216,7 @@ class IVAppCC:
             if load.query("FUNC?").strip() != mode_mapping[selected_mode]:
                 load.write(f"FUNC {mode_mapping[selected_mode]}")
 
-            load.write("INPUT ON")
-
+            # Move INPUT ON after mode and protection configuration
             if voltage_limit is not None:
                 load.write("VOLT:PROT:STAT ON")
                 load.write(f"VOLT:PROT {voltage_limit}")
@@ -233,6 +232,9 @@ class IVAppCC:
             sense_command = "REM:SENS ON" if self.sense_mode_var.get() == "4-Wire" else "REM:SENS OFF"
             load.write(sense_command)
             time.sleep(0.5)
+
+            # Enable the input only after all configuration is done
+            load.write("INPUT ON")
 
             self.ax.clear()
             if hasattr(self, 'ax2'):
@@ -283,6 +285,7 @@ class IVAppCC:
                     time.sleep(sleep_time)
                     voltage = float(load.query("MEAS:VOLT?"))
                     actual_current = float(load.query("MEAS:CURR?"))
+                    print(f"Measured: V={voltage}, I={actual_current}")
                     power = voltage * actual_current
 
                     if voltage_limit is not None and voltage > voltage_limit:
