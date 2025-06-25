@@ -397,15 +397,50 @@ class IVAppCC:
             self.canvas.draw()
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            base_filename = f"IV_Sweep_{timestamp}"
+            selected_mode = self.mode_var.get()
+            sense_mode = self.sense_mode_var.get()
+            base_filename = f"IV_Sweep_{selected_mode}_{sense_mode}_{timestamp}"
 
+            unit = "A" if selected_mode == "CC" else "V"
             if self.save_csv_var.get():
                 csv_path = os.path.join(self.output_dir, f"{base_filename}.csv")
                 with open(csv_path, mode='w', newline='') as file:
                     writer = csv.writer(file)
-                    writer.writerow(["Current (A)", "Voltage (V)", "Power (W)"])
-                    for i, v, p in zip(currents, voltages, powers):
-                        writer.writerow([i, v, p])
+                    unit = "A" if selected_mode == "CC" else "V"
+                    # 1. En-tête
+                    writer.writerow([
+                        "Current (A)", "Voltage (V)", "Power (W)", "", "Parameter", "Value"
+                    ])
+                    # 2. Ligne vide sous l'en-tête
+                    writer.writerow(["", "", "", "", "", ""])
+                    # 3. Prépare les paramètres
+                    params = [
+                        ("Mode", selected_mode),
+                        ("Sense", sense_mode),
+                        (f"Start ({unit})", self.start_current_entry.get()),
+                        (f"End ({unit})", self.end_current_entry.get()),
+                        (f"Step ({unit})", self.step_current_entry.get()),
+                        ("Voltage Limit (V)", self.voltage_limit_entry.get()),
+                        ("Current Limit (A)", self.current_limit_entry.get()),
+                        ("Step Delay (s)", self.sleep_time_entry.get()),
+                        ("Instrument", self.instr_var.get())
+                    ]
+                    # 4. Écriture des mesures et paramètres sur la même ligne
+                    max_len = max(len(currents), len(params))
+                    for idx in range(max_len):
+                        row = []
+                        # Ajoute la mesure si elle existe
+                        if idx < len(currents):
+                            row.extend([currents[idx], voltages[idx], powers[idx]])
+                        else:
+                            row.extend(["", "", ""])
+                        row.append("")  # colonne vide
+                        # Ajoute le paramètre si il existe
+                        if idx < len(params):
+                            row.extend([params[idx][0], params[idx][1]])
+                        else:
+                            row.extend(["", ""])
+                        writer.writerow(row)
                 print(f"Data saved to {csv_path}")
 
             if self.save_png_var.get():
