@@ -407,13 +407,13 @@ class IVAppCC:
                 with open(csv_path, mode='w', newline='') as file:
                     writer = csv.writer(file)
                     unit = "A" if selected_mode == "CC" else "V"
-                    # 1. En-tête
+                    # 1. Header row
                     writer.writerow([
                         "Current (A)", "Voltage (V)", "Power (W)", "", "Parameter", "Value"
                     ])
-                    # 2. Ligne vide sous l'en-tête
+                    # 2. Empty row under the header
                     writer.writerow(["", "", "", "", "", ""])
-                    # 3. Prépare les paramètres
+                    # 3. Prepare the parameters to display in the right columns
                     params = [
                         ("Mode", selected_mode),
                         ("Sense", sense_mode),
@@ -425,17 +425,17 @@ class IVAppCC:
                         ("Step Delay (s)", self.sleep_time_entry.get()),
                         ("Instrument", self.instr_var.get())
                     ]
-                    # 4. Écriture des mesures et paramètres sur la même ligne
+                    # 4. Write measurements and parameters on the same line
                     max_len = max(len(currents), len(params))
                     for idx in range(max_len):
                         row = []
-                        # Ajoute la mesure si elle existe
+                        # Add measurement if it exists
                         if idx < len(currents):
                             row.extend([currents[idx], voltages[idx], powers[idx]])
                         else:
                             row.extend(["", "", ""])
-                        row.append("")  # colonne vide
-                        # Ajoute le paramètre si il existe
+                        row.append("")  # empty column
+                        # Add parameter if it exists
                         if idx < len(params):
                             row.extend([params[idx][0], params[idx][1]])
                         else:
