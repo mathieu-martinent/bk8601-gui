@@ -272,6 +272,14 @@ class IVAppCC:
             self.progress["maximum"] = total_steps
             self.progress["value"] = 0
 
+            # --- Force starting setpoint and wait before sweep ---
+            if selected_mode == "CC":
+                load.write(f"CURR {i_start:.3f}")
+            else:
+                load.write(f"VOLT {i_start:.3f}")
+            time.sleep(sleep_time)  # Let the load stabilize at the starting point
+
+            # Démarre la boucle SANS ajouter de point avant
             for count in range(total_steps):
                 if self.stop_requested:
                     messagebox.showinfo("Sweep Stopped", "Sweep was stopped by the user.")
@@ -281,8 +289,8 @@ class IVAppCC:
                         load.write(f"CURR {current:.3f}")
                     else:
                         load.write(f"VOLT {current:.3f}")
+                    time.sleep(sleep_time)  # Let the load stabilize
 
-                    time.sleep(sleep_time)
                     voltage = float(load.query("MEAS:VOLT?"))
                     actual_current = float(load.query("MEAS:CURR?"))
                     print(f"Measured: V={voltage}, I={actual_current}")
@@ -293,9 +301,12 @@ class IVAppCC:
                     if current_limit is not None and actual_current > current_limit:
                         raise Exception("Current exceeded protection limit.")
 
-                    currents.append(actual_current)
-                    voltages.append(voltage)
-                    powers.append(power)
+                    EPS = 1e-4  # tolérance pour éviter les doublons dus à l'arrondi
+
+                    if len(currents) == 0 or abs(actual_current - currents[-1]) > EPS or abs(voltage - voltages[-1]) > EPS:
+                        currents.append(actual_current)
+                        voltages.append(voltage)
+                        powers.append(power)
 
                     if hasattr(self, 'line_iv'):
                         self.line_iv.remove()
@@ -405,45 +416,29 @@ class IVAppCC:
             base_filename = f"IV_Sweep_{selected_mode}_{sense_mode}_{timestamp}"
 
             unit = "A" if selected_mode == "CC" else "V"
+            params = [
+                ("Mode", selected_mode),
+                ("Sense", sense_mode),
+                ("Start (A)" if selected_mode == "CC" else "Start (V)", i_start),
+                ("End (A)" if selected_mode == "CC" else "End (V)", i_end),
+                ("Step (A)" if selected_mode == "CC" else "Step (V)", i_step),
+                ("Voltage Limit (V)", voltage_limit),
+                ("Current Limit (A)", current_limit),
+                ("Step Delay (s)", sleep_time),
+                ("Instrument", instrument_address),
+            ]
+
             if self.save_csv_var.get():
                 csv_path = os.path.join(self.output_dir, f"{base_filename}.csv")
                 with open(csv_path, mode='w', newline='') as file:
                     writer = csv.writer(file)
-                    unit = "A" if selected_mode == "CC" else "V"
-                    # 1. Header row
-                    writer.writerow([
-                        "Current (A)", "Voltage (V)", "Power (W)", "", "Parameter", "Value"
-                    ])
-                    # 2. Empty row under the header
-                    writer.writerow(["", "", "", "", "", ""])
-                    # 3. Prepare the parameters to display in the right columns
-                    params = [
-                        ("Mode", selected_mode),
-                        ("Sense", sense_mode),
-                        (f"Start ({unit})", self.start_current_entry.get()),
-                        (f"End ({unit})", self.end_current_entry.get()),
-                        (f"Step ({unit})", self.step_current_entry.get()),
-                        ("Voltage Limit (V)", self.voltage_limit_entry.get()),
-                        ("Current Limit (A)", self.current_limit_entry.get()),
-                        ("Step Delay (s)", self.sleep_time_entry.get()),
-                        ("Instrument", self.instr_var.get())
-                    ]
-                    # 4. Write measurements and parameters on the same line
-                    max_len = max(len(currents), len(params))
-                    for idx in range(max_len):
-                        row = []
-                        # Add measurement if it exists (no apostrophe)
-                        if idx < len(currents):
-                            row.extend([currents[idx], voltages[idx], powers[idx]])
-                        else:
-                            row.extend(["", "", ""])
-                        row.append("")  # empty column
-                        # Add parameter if it exists
-                        if idx < len(params):
-                            row.extend([params[idx][0], params[idx][1]])
-                        else:
-                            row.extend(["", ""])
-                        writer.writerow(row)
+                    writer.writerow(["Current (A)", "Voltage (V)", "Power (W)"])
+                    for i in range(len(currents)):
+                        writer.writerow([currents[i], voltages[i], powers[i]])
+                    writer.writerow([])  # Ligne vide
+                    writer.writerow(["Parameter", "Value"])
+                    for param, value in params:
+                        writer.writerow([param, value])
                 print(f"Data saved to {csv_path}")
 
             if self.save_png_var.get():
