@@ -16,7 +16,7 @@ class IVAppCC:
         self.root = root
         self.root.title("I-V Curve Measurement (CC/CV Mode)")
 
-        # VISA instrument selection
+        # VISA instrument selection dropdown
         tk.Label(root, text="Select Instrument:").grid(row=0, column=0, sticky="e")
         try:
             self.rm = pyvisa.ResourceManager()
@@ -110,7 +110,7 @@ class IVAppCC:
         self.canvas = FigureCanvasTkAgg(self.figure, master=root)
         self.canvas.get_tk_widget().grid(row=13, column=0, columnspan=3, sticky="nsew")
 
-        # Configure resizing behavior
+        # Configure resizing behavior for the plot area
         root.grid_rowconfigure(13, weight=1)
         root.grid_columnconfigure(1, weight=1)
 
@@ -118,28 +118,32 @@ class IVAppCC:
         self.stop_requested = False
         self.sweep_running = False
 
-        # Bind Enter and Escape keys
+        # Bind Enter and Escape keys for quick actions
         self.root.bind('<Return>', self.on_enter)
         self.root.bind('<Escape>', self.on_escape)
 
-        # Load last used settings
+        # Load last used settings from file
         self.load_settings()
 
     def choose_output_dir(self):
+        """Open a dialog to choose a new output directory."""
         new_dir = filedialog.askdirectory(initialdir=os.getcwd(), title="Choose output directory")
         if new_dir:
             self.output_dir = new_dir
             self.folder_label.config(text=f"Output directory: {self.output_dir}")
 
     def on_enter(self, event):
+        """Start sweep when Enter is pressed, if not already running."""
         if not self.sweep_running:
             self.start_sweep_thread()
 
     def on_escape(self, event):
+        """Request stop when Escape is pressed, if sweep is running."""
         if self.sweep_running:
             self.request_stop()
 
     def start_sweep_thread(self):
+        """Start the sweep in a separate thread to avoid freezing the GUI."""
         if self.sweep_running:
             return  # Prevent double start
         self.sweep_running = True
@@ -148,9 +152,11 @@ class IVAppCC:
         thread.start()
 
     def request_stop(self):
+        """Set the stop flag to request sweep interruption."""
         self.stop_requested = True
 
     def update_labels(self, *args):
+        """Update the labels of the input fields depending on the selected mode."""
         selected_mode = self.mode_var.get()
         if selected_mode == "CC":
             self.start_label.config(text="Start Current (A):")
@@ -162,6 +168,7 @@ class IVAppCC:
             self.step_label.config(text="Step Voltage (V):")
 
     def save_settings(self):
+        """Save the current GUI settings to a JSON file."""
         settings = {
             "start": self.start_current_entry.get(),
             "end": self.end_current_entry.get(),
@@ -180,6 +187,7 @@ class IVAppCC:
             json.dump(settings, f)
 
     def load_settings(self):
+        """Load the last used GUI settings from a JSON file."""
         if os.path.exists("last_settings.json"):
             with open("last_settings.json", "r") as f:
                 settings = json.load(f)
@@ -192,7 +200,7 @@ class IVAppCC:
             self.voltage_limit_entry.delete(0, tk.END)
             self.voltage_limit_entry.insert(0, settings.get("voltage_limit", ""))
             self.current_limit_entry.delete(0, tk.END)
-            self.current_limit_entry.insert(0, settings.get("current_limit", ""))
+            self.current_limit_entry.insert(0, settings.get("currentLimit", ""))
             self.sleep_time_entry.delete(0, tk.END)
             self.sleep_time_entry.insert(0, settings.get("sleep_time", ""))
             self.mode_var.set(settings.get("mode", "CC"))
@@ -206,8 +214,10 @@ class IVAppCC:
                 self.folder_label.config(text=f"Output directory: {self.output_dir}")
 
     def start_sweep(self):
+        """Main function to perform the I-V sweep and handle all measurements, plotting, and saving."""
         self.stop_requested = False  # Reset stop flag at each sweep start
         try:
+            # Parse user input values
             i_start = float(self.start_current_entry.get())
             i_end = float(self.end_current_entry.get())
             i_step = float(self.step_current_entry.get())
@@ -252,6 +262,7 @@ class IVAppCC:
         instrument_address = self.instr_var.get()
 
         try:
+            # Open instrument connection (real or simulated)
             if instrument_address == "Simulated Instrument":
                 load = self.create_simulated_instrument()
             else:
@@ -259,12 +270,13 @@ class IVAppCC:
                 load.timeout = 5000
                 load.write("*CLS")
 
+            # Set instrument mode (CC or CV)
             selected_mode = self.mode_var.get()
             mode_mapping = {"CC": "CURR", "CV": "VOLT"}
             if load.query("FUNC?").strip() != mode_mapping[selected_mode]:
                 load.write(f"FUNC {mode_mapping[selected_mode]}")
 
-            # Move INPUT ON after mode and protection configuration
+            # Configure protection limits
             if voltage_limit is not None:
                 load.write("VOLT:PROT:STAT ON")
                 load.write(f"VOLT:PROT {voltage_limit}")
@@ -277,6 +289,7 @@ class IVAppCC:
             else:
                 load.write("CURR:PROT:STAT OFF")
 
+            # Set sense mode (2-Wire or 4-Wire)
             sense_command = "REM:SENS ON" if self.sense_mode_var.get() == "4-Wire" else "REM:SENS OFF"
             load.write(sense_command)
             time.sleep(0.5)
@@ -284,12 +297,13 @@ class IVAppCC:
             # Enable the input only after all configuration is done
             load.write("INPUT ON")
 
+            # Prepare plot area
             self.ax.clear()
             if hasattr(self, 'ax2'):
                 self.figure.delaxes(self.ax2)
             self.ax2 = self.ax.twinx()
 
-            # Always set axis labels right after clearing
+            # Set axis labels
             self.ax.set_xlabel("Voltage (V)")
             self.ax.set_ylabel("Current (A)", color='b')
             self.ax2.set_ylabel("Power (W)", color='r')
@@ -313,8 +327,10 @@ class IVAppCC:
             self.ax2.tick_params(axis='y', labelcolor='r')
             self.canvas.draw()
 
+            # Prepare data lists
             currents, voltages, powers = [], [], []
 
+            # Configure sweep parameters and setpoint command depending on mode
             if selected_mode == "CC":
                 sweep_start = i_start
                 sweep_end = i_end
@@ -332,11 +348,11 @@ class IVAppCC:
             self.progress["value"] = 0
             print(f"total_steps = {total_steps}, sweep_start = {sweep_start}, sweep_end = {sweep_end}, sweep_step = {sweep_step}")  # Debugging line
 
-            # --- Force starting setpoint and wait before sweep ---
+            # Force starting setpoint and wait before sweep
             setpoint_cmd(sweep_start)
             time.sleep(sleep_time)
 
-            # --- Reset instrument state before sweep ---
+            # Reset instrument state before sweep
             load.write("INPUT OFF")
             time.sleep(0.2)
             setpoint_cmd(sweep_start)
@@ -344,6 +360,7 @@ class IVAppCC:
             load.write("INPUT ON")
             time.sleep(sleep_time)
 
+            # Main sweep loop
             for count in range(total_steps):
                 if self.stop_requested:
                     messagebox.showinfo("Sweep Stopped", "Sweep was stopped by the user.")
@@ -357,6 +374,7 @@ class IVAppCC:
                     print(f"Measured: V={voltage}, I={actual_current}")
                     power = voltage * actual_current
 
+                    # Protection checks
                     if voltage_limit is not None and voltage > voltage_limit:
                         raise Exception("Voltage exceeded protection limit.")
                     if current_limit is not None and actual_current > current_limit:
@@ -364,17 +382,20 @@ class IVAppCC:
 
                     print(f"Protection check: V={voltage} (limit {voltage_limit}), I={actual_current} (limit {current_limit})")
 
+                    # Only append new point if it is different from the last one
                     EPS = 1e-4
                     if len(currents) == 0 or abs(actual_current - currents[-1]) > EPS or abs(voltage - voltages[-1]) > EPS:
                         currents.append(actual_current)
                         voltages.append(voltage)
                         powers.append(power)
 
+                    # Update I-V curve plot
                     if hasattr(self, 'line_iv'):
                         self.line_iv.remove()
                         del self.line_iv
                     self.line_iv, = self.ax.plot(voltages, currents, label="I-V Curve", color='blue')
 
+                    # Update P-V curve plot
                     if hasattr(self, 'line_power'):
                         self.line_power.remove()
                         del self.line_power
@@ -389,15 +410,16 @@ class IVAppCC:
                     self.root.update_idletasks()
                     self.progress["value"] = count + 1
                 except Exception as e:
-                    print(f"Exception in sweep loop: {e}")  # <-- Ajoute cette ligne
+                    print(f"Exception in sweep loop: {e}")  # Print exception for debugging
                     messagebox.showwarning("Protection Triggered", f"Sweep stopped: {e}")
                     break
                 value += sweep_step
 
+            # Turn off instrument input and close connection
             load.write("INPUT OFF")
             load.close()
 
-            # Swap axes: Voltage (V) on X, Current (A) on Y
+            # Final plot update after sweep
             if voltages and currents and hasattr(self, 'line_iv'):
                 self.line_iv.set_data(voltages, currents)
             if voltages and powers and hasattr(self, 'line_power'):
@@ -411,6 +433,7 @@ class IVAppCC:
             self.ax2.autoscale_view()
             self.canvas.draw()
 
+            # Annotate summary results on the plot
             if powers:
                 pmp = max(powers)
                 idx = powers.index(pmp)
@@ -437,6 +460,7 @@ class IVAppCC:
             )
             self.canvas.draw()
 
+            # Prepare file and folder names for saving results
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             selected_mode = self.mode_var.get()
             sense_mode = self.sense_mode_var.get()
@@ -455,10 +479,12 @@ class IVAppCC:
                 ("Instrument", instrument_address),
             ]
 
+            # Create a subfolder for today's date if it doesn't exist
             today_str = datetime.now().strftime("%Y-%m-%d")
             day_output_dir = os.path.join(self.output_dir, today_str)
             os.makedirs(day_output_dir, exist_ok=True)
 
+            # Save CSV data if requested
             if self.save_csv_var.get():
                 csv_path = os.path.join(day_output_dir, f"{base_filename}.csv")
                 with open(csv_path, mode='w', newline='') as file:
@@ -472,11 +498,37 @@ class IVAppCC:
                         writer.writerow([param, value])
                 print(f"Data saved to {csv_path}")
 
+            # Highlight the Pmp point (maximum power) on the Power curve (red axis)
+            if powers and voltages and currents:
+                pmp = max(powers)
+                idx = powers.index(pmp)
+                vmp = voltages[idx]
+                imp = currents[idx]
+                # Plot a big red dot at the maximum power point on the P-V curve
+                self.ax2.plot(vmp, pmp, 'ro', markersize=12, label="Pmp")
+                # Add a label with an arrow pointing to the point
+                self.ax2.annotate(
+                    "Pmp",
+                    xy=(vmp, pmp),
+                    xytext=(20, 20),
+                    textcoords='offset points',
+                    fontsize=12,
+                    color='red',
+                    ha='left',
+                    va='bottom',
+                    arrowprops=dict(arrowstyle="->", color='red', lw=2),
+                    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="red", lw=1)
+                )
+                # Force redraw so it's visible even before resizing
+                self.canvas.draw()
+
+            # Save PNG plot if requested
             if self.save_png_var.get():
                 png_path = os.path.join(day_output_dir, f"{base_filename}.png")
                 self.figure.savefig(png_path)
                 print(f"Plot saved to {png_path}")
 
+            # Show summary message box
             message = f"Sweep completed.\nPmp = {pmp:.2f} W\nVmp = {vmp:.2f} V\nImp = {imp:.2f} A" if pmp else "Sweep completed with no power data."
             messagebox.showinfo("Sweep Complete", message)
 
@@ -490,6 +542,7 @@ class IVAppCC:
             self.start_button.config(state='normal')
 
     def create_simulated_instrument(self):
+        """Create a simulated instrument for testing without hardware."""
         class SimulatedInstrument:
             def __init__(self):
                 self.state = {
@@ -503,6 +556,7 @@ class IVAppCC:
                 }
 
             def write(self, command):
+                # Simulate instrument command handling
                 if "FUNC" in command:
                     self.state["FUNC"] = command.split()[-1]
                 elif "CURR" in command and "CURR:PROT" not in command:
@@ -529,6 +583,7 @@ class IVAppCC:
                         pass
 
             def query(self, command):
+                # Simulate instrument measurement queries
                 Isc = 5.0
                 Voc = 25
                 n = 1.5
@@ -567,6 +622,7 @@ class IVAppCC:
         return SimulatedInstrument()
 
 if __name__ == "__main__":
+    # Start the main application window
     root = tk.Tk()
     root.geometry("950x850")
     root.resizable(True, True)
