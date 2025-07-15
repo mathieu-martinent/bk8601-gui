@@ -1,7 +1,7 @@
 # BK8601-GUI
 
 Graphical user interface (GUI) in Python for automated I-V curve measurement using the BK Precision 8601 DC electronic load.
-
+ 
 ## 📌 Description
 
 This project provides an interactive tool to control the BK Precision 8601 for current/voltage sweep measurements on electronic devices (e.g., solar cells).  
