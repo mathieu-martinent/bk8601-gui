@@ -355,23 +355,25 @@ class IVAppCC:
             # Reset instrument state before sweep
             load.write("INPUT OFF")
             time.sleep(0.2)
-            setpoint_cmd(sweep_start)
-            time.sleep(0.2)
-            load.write("INPUT ON")
-            time.sleep(sleep_time)
 
-            # Main sweep loop
             for count in range(total_steps):
                 if self.stop_requested:
                     messagebox.showinfo("Sweep Stopped", "Sweep was stopped by the user.")
                     break
                 try:
-                    setpoint_cmd(value)
-                    print(f"Setpoint: {value}")
+                    if selected_mode == "CV":
+                        load.write("INPUT OFF")
+                        time.sleep(0.1)
+                        setpoint_cmd(value)         # VOLT {valeur}
+                        time.sleep(0.1)
+                        load.write("INPUT ON")
+                    else:
+                        setpoint_cmd(value)         # CURR {valeur}
+                        time.sleep(0.2)
+                        load.write("INPUT ON")
                     time.sleep(sleep_time)
                     voltage = float(load.query("MEAS:VOLT?"))
                     actual_current = float(load.query("MEAS:CURR?"))
-                    print(f"Measured: V={voltage}, I={actual_current}")
                     power = voltage * actual_current
 
                     # Protection checks
