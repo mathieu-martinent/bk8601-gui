@@ -1,0 +1,1 @@
+{"start": "0.2", "end": "0.7", "step": "0.01", "voltage_limit": "0.7", "current_limit": "5", "sleep_time": "0.2", "mode": "CV", "sense": "4-Wire", "instr": "USB0::0x2EC7::0x8800::802199042787070066::INSTR", "save_csv": true, "save_png": true, "output_dir": "c:\\Users\\mathi\\OneDrive\\Documents\\Internship_ETSIT\\bk8601-gui\\output"}

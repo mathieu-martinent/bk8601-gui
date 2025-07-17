@@ -217,7 +217,7 @@ class IVAppCC:
         """Main function to perform the I-V sweep and handle all measurements, plotting, and saving."""
         self.stop_requested = False  # Reset stop flag at each sweep start
         try:
-            # Parse user input values
+            # Parse user input values from GUI
             i_start = float(self.start_current_entry.get())
             i_end = float(self.end_current_entry.get())
             i_step = float(self.step_current_entry.get())
@@ -268,7 +268,8 @@ class IVAppCC:
             else:
                 load = self.rm.open_resource(instrument_address)
                 load.timeout = 5000
-                load.write("*CLS")
+                load.write("*RST")   # Reset instrument
+                load.write("*CLS")   # Clear status
 
             # Set instrument mode (CC or CV)
             selected_mode = self.mode_var.get()
@@ -327,7 +328,7 @@ class IVAppCC:
             self.ax2.tick_params(axis='y', labelcolor='r')
             self.canvas.draw()
 
-            # Prepare data lists
+            # Prepare data lists for sweep results
             currents, voltages, powers = [], [], []
 
             # Configure sweep parameters and setpoint command depending on mode
@@ -352,8 +353,8 @@ class IVAppCC:
             setpoint_cmd(sweep_start)
             time.sleep(sleep_time)
 
-            # Reset instrument state before sweep
-            load.write("INPUT OFF")
+            # Enable input just before starting the sweep
+            load.write("INPUT ON")
             time.sleep(0.2)
 
             for count in range(total_steps):
@@ -361,16 +362,7 @@ class IVAppCC:
                     messagebox.showinfo("Sweep Stopped", "Sweep was stopped by the user.")
                     break
                 try:
-                    if selected_mode == "CV":
-                        load.write("INPUT OFF")
-                        time.sleep(0.1)
-                        setpoint_cmd(value)         # VOLT {valeur}
-                        time.sleep(0.1)
-                        load.write("INPUT ON")
-                    else:
-                        setpoint_cmd(value)         # CURR {valeur}
-                        time.sleep(0.2)
-                        load.write("INPUT ON")
+                    setpoint_cmd(value)         # Set current or voltage depending on mode
                     time.sleep(sleep_time)
                     voltage = float(load.query("MEAS:VOLT?"))
                     actual_current = float(load.query("MEAS:CURR?"))
@@ -383,6 +375,7 @@ class IVAppCC:
                         raise Exception("Current exceeded protection limit.")
 
                     print(f"Protection check: V={voltage} (limit {voltage_limit}), I={actual_current} (limit {current_limit})")
+                    print(f"Setpoint: {value:.3f} V, Measured: {voltage:.3f} V, {actual_current:.3f} A")  # Debug print
 
                     # Only append new point if it is different from the last one
                     EPS = 1e-4
@@ -407,6 +400,13 @@ class IVAppCC:
                     self.ax.autoscale_view()
                     self.ax2.relim()
                     self.ax2.autoscale_view()
+
+                    # Adjust X axis limits: always start at 0 V, end just above max measured voltage
+                    if voltages:
+                        v_max = max(voltages)
+                        self.ax.set_xlim(left=0, right=v_max * 1.0105)
+                    else:
+                        self.ax.set_xlim(left=0)
 
                     self.canvas.draw()
                     self.root.update_idletasks()
