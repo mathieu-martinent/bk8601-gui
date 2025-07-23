@@ -12,6 +12,10 @@ A comprehensive Python-based GUI application for controlling the **BK Precision 
 ![Main GUI](docs/screenshots/main_interface.png)
 *BK8601-GUI main interface with measurement controls and real-time plotting*
 
+### Curve Comparison Tool
+![Comparison Tool](docs/screenshots/comparison_tool.png)
+*Advanced multi-curve analysis with automatic parameter extraction*
+
 ---
 
 ## ✨ Features
