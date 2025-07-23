@@ -275,7 +275,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 For questions, issues, or feature requests:
 - 🐛 [Report bugs](https://github.com/mathieu-martinent/bk8601-gui/issues)
 - 💡 [Request features](https://github.com/mathieu-martinent/bk8601-gui/issues)
-- 📧 Contact: [Your Email]
+- 📧 Contact: mathieumartinent09@gmail.com
 
 ---
 
