@@ -1,7 +1,10 @@
 # Ne pas suivre les résultats d'expériences 
 output/
 *.csv
-*.png
+output/*.png
+
+# Autoriser les screenshots de documentation
+!docs/screenshots/*.png
 
 # Fichiers temporaires 
 __pycache__/
