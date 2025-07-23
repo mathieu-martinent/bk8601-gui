@@ -261,7 +261,7 @@ class IVAppCC:
             self.voltage_limit_entry.delete(0, tk.END)
             self.voltage_limit_entry.insert(0, settings.get("voltage_limit", ""))
             self.current_limit_entry.delete(0, tk.END)
-            self.current_limit_entry.insert(0, settings.get("currentLimit", ""))
+            self.current_limit_entry.insert(0, settings.get("current_limit", ""))
             self.sleep_time_entry.delete(0, tk.END)
             self.sleep_time_entry.insert(0, settings.get("sleep_time", ""))
             
@@ -459,7 +459,7 @@ class IVAppCC:
                         raise Exception("Current exceeded protection limit.")
 
                     # Debug output for monitoring
-                    print(f"Protection check: V={voltage} (limit {voltage_limit}), I={actual_current} (limit {currentLimit})")
+                    print(f"Protection check: V={voltage} (limit {voltage_limit}), I={actual_current} (limit {current_limit})")
                     print(f"Setpoint: {value:.3f} V, Measured: {voltage:.3f} V, {actual_current:.3f} A")
 
                     # Store data point (avoid duplicates within tolerance)
