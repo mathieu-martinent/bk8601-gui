@@ -10,6 +10,7 @@ from datetime import datetime
 import math
 import threading
 import json
+import pandas as pd  # Add this import
 
 class IVAppCC:
     def __init__(self, root):
@@ -99,6 +100,10 @@ class IVAppCC:
 
         self.stop_button = tk.Button(root, text="Stop", command=self.request_stop, state="normal")
         self.stop_button.grid(row=11, column=2, pady=10)
+
+        # Add comparison button after the stop button
+        self.compare_button = tk.Button(root, text="Compare Curves", command=self.open_comparison_window)
+        self.compare_button.grid(row=11, column=3, pady=10)
 
         # Progress bar to show sweep progress
         self.progress = ttk.Progressbar(root, orient='horizontal', mode='determinate')
@@ -622,6 +627,414 @@ class IVAppCC:
                 pass
 
         return SimulatedInstrument()
+
+    def open_comparison_window(self):
+        """Open a new window for comparing multiple I-V curves."""
+        comparison_window = tk.Toplevel(self.root)
+        comparison_window.title("I-V Curve Comparison")
+        comparison_window.geometry("1200x800")
+        
+        # Create comparison app instance
+        ComparisonApp(comparison_window, self.output_dir)
+
+class ComparisonApp:
+    def __init__(self, root, default_output_dir):
+        self.root = root
+        self.output_dir = default_output_dir
+        self.loaded_curves = []  # List to store loaded curve data
+        
+        # Create main frame
+        main_frame = tk.Frame(root)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Control panel on the left
+        control_frame = tk.Frame(main_frame)
+        control_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+        
+        # File selection area
+        tk.Label(control_frame, text="Load I-V Data Files:", font=("Arial", 12, "bold")).pack(anchor="w")
+        
+        # Quick access to recent measurements
+        tk.Button(control_frame, text="Browse Recent Measurements", 
+                 command=self.browse_recent_measurements, bg="lightgreen").pack(pady=5)
+        
+        # Listbox to show loaded files
+        self.file_listbox = tk.Listbox(control_frame, height=8, width=40)
+        self.file_listbox.pack(pady=(5, 0))
+        
+        # Buttons for file operations
+        button_frame = tk.Frame(control_frame)
+        button_frame.pack(pady=5)
+        
+        tk.Button(button_frame, text="Add CSV File", command=self.add_csv_file).pack(side=tk.LEFT, padx=(0, 5))
+        tk.Button(button_frame, text="Remove Selected", command=self.remove_selected_file).pack(side=tk.LEFT, padx=(0, 5))
+        tk.Button(button_frame, text="Clear All", command=self.clear_all_files).pack(side=tk.LEFT)
+        
+        # Plot options
+        tk.Label(control_frame, text="Plot Options:", font=("Arial", 12, "bold")).pack(anchor="w", pady=(20, 5))
+        
+        # Checkboxes for what to plot
+        self.show_iv_var = tk.BooleanVar(value=True)
+        self.show_pv_var = tk.BooleanVar(value=True)
+        
+        tk.Checkbutton(control_frame, text="Show I-V Curves", variable=self.show_iv_var, command=self.update_plot).pack(anchor="w")
+        tk.Checkbutton(control_frame, text="Show P-V Curves", variable=self.show_pv_var, command=self.update_plot).pack(anchor="w")
+        
+        # Plot button
+        tk.Button(control_frame, text="Update Plot", command=self.update_plot, 
+                 bg="lightblue", font=("Arial", 10, "bold")).pack(pady=10)
+        
+        # Export button
+        tk.Button(control_frame, text="Export Comparison", command=self.export_comparison).pack(pady=(0, 10))
+        
+        # Statistics area
+        tk.Label(control_frame, text="Statistics:", font=("Arial", 12, "bold")).pack(anchor="w", pady=(20, 5))
+        self.stats_text = tk.Text(control_frame, height=10, width=40, font=("Courier", 9))
+        self.stats_text.pack()
+        
+        # Plot area on the right
+        plot_frame = tk.Frame(main_frame)
+        plot_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        
+        # Create matplotlib figure
+        self.figure = plt.Figure(figsize=(10, 8), dpi=100)
+        self.canvas = FigureCanvasTkAgg(self.figure, master=plot_frame)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+        # Initialize empty plot
+        self.ax1 = self.figure.add_subplot(211)  # I-V curves
+        self.ax2 = self.figure.add_subplot(212)  # P-V curves
+        self.figure.tight_layout()
+        self.canvas.draw()
+    
+    def browse_recent_measurements(self):
+        """Browse and select from recent measurements in the output folder."""
+        if not os.path.exists(self.output_dir):
+            messagebox.showwarning("Warning", f"Output directory not found: {self.output_dir}")
+            return
+        
+        # Create a selection window
+        selection_window = tk.Toplevel(self.root)
+        selection_window.title("Select Recent Measurements")
+        selection_window.geometry("600x400")
+        
+        # Get all CSV files from output folder (organized by date)
+        csv_files = []
+        for root, dirs, files in os.walk(self.output_dir):
+            for file in files:
+                if file.endswith('.csv'):
+                    full_path = os.path.join(root, file)
+                    rel_path = os.path.relpath(full_path, self.output_dir)
+                    csv_files.append((rel_path, full_path))
+        
+        # Sort by modification time (newest first)
+        csv_files.sort(key=lambda x: os.path.getmtime(x[1]), reverse=True)
+        
+        tk.Label(selection_window, text="Recent Measurements (newest first):", 
+                font=("Arial", 12, "bold")).pack(pady=5)
+        
+        # Create listbox with scrollbar
+        list_frame = tk.Frame(selection_window)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        scrollbar = tk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        file_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, selectmode=tk.MULTIPLE)
+        file_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=file_listbox.yview)
+        
+        # Populate listbox
+        for rel_path, full_path in csv_files:
+            file_listbox.insert(tk.END, rel_path)
+        
+        # Buttons
+        button_frame = tk.Frame(selection_window)
+        button_frame.pack(pady=10)
+        
+        def load_selected():
+            selected_indices = file_listbox.curselection()
+            if not selected_indices:
+                messagebox.showwarning("Warning", "Please select at least one file.")
+                return
+            
+            for idx in selected_indices:
+                _, full_path = csv_files[idx]
+                self.load_csv_file(full_path)
+            
+            selection_window.destroy()
+        
+        tk.Button(button_frame, text="Load Selected", command=load_selected, 
+                 bg="lightgreen").pack(side=tk.LEFT, padx=5)
+        tk.Button(button_frame, text="Cancel", command=selection_window.destroy).pack(side=tk.LEFT, padx=5)
+    
+    def add_csv_file(self):
+        """Add a CSV file to the comparison."""
+        file_path = filedialog.askopenfilename(
+            title="Select I-V Data CSV File",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            initialdir=self.output_dir
+        )
+        
+        if file_path:
+            self.load_csv_file(file_path)
+    
+    def load_csv_file(self, file_path):
+        """Load a single CSV file."""
+        try:
+            # Try to read the CSV file
+            df = pd.read_csv(file_path)
+            
+            # Check if required columns exist
+            required_cols = ["Current (A)", "Voltage (V)", "Power (W)"]
+            if not all(col in df.columns for col in required_cols):
+                messagebox.showerror("Error", f"CSV file must contain columns: {', '.join(required_cols)}")
+                return
+            
+            # Clean the data: remove non-numeric rows and convert to numeric
+            # First, drop any rows with NaN values
+            df = df.dropna()
+            
+            # Convert to numeric, coercing errors to NaN
+            df["Current (A)"] = pd.to_numeric(df["Current (A)"], errors='coerce')
+            df["Voltage (V)"] = pd.to_numeric(df["Voltage (V)"], errors='coerce')
+            df["Power (W)"] = pd.to_numeric(df["Power (W)"], errors='coerce')
+            
+            # Drop rows that couldn't be converted to numbers
+            df = df.dropna()
+            
+            # Additional check: remove rows where all values are zero (header repetitions)
+            df = df[(df["Current (A)"] != 0) | (df["Voltage (V)"] != 0) | (df["Power (W)"] != 0)]
+            
+            if df.empty:
+                messagebox.showerror("Error", "No valid numeric data found in CSV file")
+                return
+            
+            # Extract metadata from filename if possible
+            filename = os.path.basename(file_path)
+            
+            # Try to extract mode and sense from filename
+            mode = "Unknown"
+            sense = "Unknown"
+            
+            if "_CC_" in filename:
+                mode = "CC"
+            elif "_CV_" in filename:
+                mode = "CV"
+            
+            if "_4-Wire_" in filename:
+                sense = "4-Wire"
+            elif "_2-Wire_" in filename:
+                sense = "2-Wire"
+            
+            # If not found in filename, try to guess from data
+            if mode == "Unknown":
+                # Simple heuristic: if voltage range is larger, probably CV mode
+                voltage_range = df["Voltage (V)"].max() - df["Voltage (V)"].min()
+                current_range = df["Current (A)"].max() - df["Current (A)"].min()
+                mode = "CV" if voltage_range > current_range else "CC"
+            
+            # Store the curve data
+            curve_data = {
+                'file_path': file_path,
+                'filename': filename,
+                'mode': mode,
+                'sense': sense,
+                'current': df["Current (A)"].values,
+                'voltage': df["Voltage (V)"].values,
+                'power': df["Power (W)"].values
+            }
+            
+            self.loaded_curves.append(curve_data)
+            display_name = f"{mode} {sense} - {filename}"
+            self.file_listbox.insert(tk.END, display_name)
+            self.update_plot()
+            self.update_statistics()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load CSV file:\n{file_path}\n\nError: {e}")
+    
+    def remove_selected_file(self):
+        """Remove the selected file from the comparison."""
+        selection = self.file_listbox.curselection()
+        if selection:
+            index = selection[0]
+            self.loaded_curves.pop(index)
+            self.file_listbox.delete(index)
+            self.update_plot()
+            self.update_statistics()
+    
+    def clear_all_files(self):
+        """Clear all loaded files."""
+        self.loaded_curves.clear()
+        self.file_listbox.delete(0, tk.END)
+        self.update_plot()
+        self.update_statistics()
+    
+    def update_plot(self):
+        """Update the comparison plot with all loaded curves."""
+        # Clear previous plots
+        self.ax1.clear()
+        self.ax2.clear()
+        
+        if not self.loaded_curves:
+            self.ax1.text(0.5, 0.5, "No data loaded\nClick 'Browse Recent Measurements' to load your existing CSV files", 
+                         ha='center', va='center', transform=self.ax1.transAxes)
+            self.ax2.text(0.5, 0.5, "No data loaded", ha='center', va='center', transform=self.ax2.transAxes)
+            self.canvas.draw()
+            return
+        
+        # Color palette for different curves - more distinct colors
+        colors = ['blue', 'red', 'green', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive', 'cyan']
+        # Larger and more distinct markers
+        markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', '+', 'x']
+        # Different line styles for extra distinction
+        linestyles = ['-', '--', '-.', ':', '-', '--', '-.', ':', '-', '--']
+        
+        # Plot I-V curves if enabled
+        if self.show_iv_var.get():
+            self.ax1.set_xlabel("Voltage (V)")
+            self.ax1.set_ylabel("Current (A)")
+            self.ax1.set_title("I-V Curve Comparison")
+            self.ax1.grid(True, alpha=0.3)
+            
+            for i, curve in enumerate(self.loaded_curves):
+                color = colors[i % len(colors)]
+                marker = markers[i % len(markers)]
+                linestyle = linestyles[i % len(linestyles)]
+                label = f"{curve['mode']} {curve['sense']}"
+                
+                # Use absolute values for current to match the main application display
+                current_abs = [abs(c) for c in curve['current']]
+                
+                self.ax1.plot(curve['voltage'], current_abs, 
+                             color=color, marker=marker, markersize=8, linewidth=3,
+                             linestyle=linestyle, label=label, alpha=0.8, 
+                             markeredgewidth=1, markeredgecolor='black')
+            
+            # Set both X and Y axes to start from 0 (like in main application)
+            self.ax1.set_xlim(left=0)
+            self.ax1.set_ylim(bottom=0)
+            self.ax1.legend()
+        
+        # Plot P-V curves if enabled
+        if self.show_pv_var.get():
+            self.ax2.set_xlabel("Voltage (V)")
+            self.ax2.set_ylabel("Power (W)")
+            self.ax2.set_title("P-V Curve Comparison")
+            self.ax2.grid(True, alpha=0.3)
+            
+            for i, curve in enumerate(self.loaded_curves):
+                color = colors[i % len(colors)]
+                marker = markers[i % len(markers)]
+                linestyle = linestyles[i % len(linestyles)]
+                label = f"{curve['mode']} {curve['sense']}"
+                
+                # Use absolute values for power calculation to ensure positive power
+                power_abs = [abs(p) for p in curve['power']]
+                
+                self.ax2.plot(curve['voltage'], power_abs, 
+                             color=color, marker=marker, markersize=8, linewidth=3,
+                             linestyle=linestyle, label=label, alpha=0.8,
+                             markeredgewidth=1, markeredgecolor='black')
+                
+                # Mark maximum power point with larger star
+                max_power_idx = power_abs.index(max(power_abs))
+                max_power = power_abs[max_power_idx]
+                max_power_voltage = curve['voltage'][max_power_idx]
+                
+                self.ax2.plot(max_power_voltage, max_power, 
+                             color=color, marker='*', markersize=15, 
+                             markeredgecolor='black', markeredgewidth=2)
+            
+            # Set both X and Y axes to start from 0 (like in main application)
+            self.ax2.set_xlim(left=0)
+            self.ax2.set_ylim(bottom=0)
+            self.ax2.legend()
+        
+        self.figure.tight_layout()
+        self.canvas.draw()
+    
+    def update_statistics(self):
+        """Update the statistics display."""
+        self.stats_text.delete(1.0, tk.END)
+        
+        if not self.loaded_curves:
+            self.stats_text.insert(tk.END, "No data loaded")
+            return
+        
+        stats_text = "Curve Statistics:\n" + "="*30 + "\n\n"
+        
+        for i, curve in enumerate(self.loaded_curves):
+            stats_text += f"Curve {i+1}: {curve['mode']} {curve['sense']}\n"
+            stats_text += f"File: {curve['filename']}\n"
+            
+            try:
+                # Convert to numpy arrays for easier manipulation
+                current_array = curve['current']
+                voltage_array = curve['voltage']
+                power_array = curve['power']
+                
+                # Use absolute values to match main application display
+                current_abs = [abs(float(c)) for c in current_array]
+                power_abs = [abs(float(p)) for p in power_array]
+                voltage_vals = [float(v) for v in voltage_array]
+                
+                # Calculate key parameters with proper error handling
+                max_power_idx = power_abs.index(max(power_abs))
+                pmp = power_abs[max_power_idx]
+                vmp = voltage_vals[max_power_idx]
+                imp = current_abs[max_power_idx]
+                
+                # Find Voc and Isc more robustly
+                min_current_idx = current_abs.index(min(current_abs))
+                voc = voltage_vals[min_current_idx]
+                
+                min_voltage_idx = voltage_vals.index(min(voltage_vals))
+                isc = current_abs[min_voltage_idx]
+                
+                # Calculate fill factor with proper type conversion
+                if (voc * isc) > 0:
+                    fill_factor = (pmp / (voc * isc)) * 100
+                else:
+                    fill_factor = 0
+                
+                stats_text += f"Pmp: {pmp:.3f} W\n"
+                stats_text += f"Vmp: {vmp:.3f} V\n"
+                stats_text += f"Imp: {imp:.3f} A\n"
+                stats_text += f"Voc: {voc:.3f} V\n"
+                stats_text += f"Isc: {isc:.3f} A\n"
+                stats_text += f"FF: {fill_factor:.1f}%\n"
+                
+            except (ValueError, TypeError, IndexError) as e:
+                stats_text += f"Error calculating parameters: {e}\n"
+            
+            stats_text += "-"*25 + "\n\n"
+        
+        self.stats_text.insert(tk.END, stats_text)
+    
+    def export_comparison(self):
+        """Export the comparison plot and statistics."""
+        if not self.loaded_curves:
+            messagebox.showwarning("Warning", "No data to export")
+            return
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Export plot
+        plot_path = filedialog.asksaveasfilename(
+            title="Save Comparison Plot",
+            defaultextension=".png",
+            filetypes=[("PNG files", "*.png"), ("PDF files", "*.pdf")],
+            initialfile=f"IV_Comparison_{timestamp}.png"
+        )
+        
+        if plot_path:
+            try:
+                self.figure.savefig(plot_path, dpi=300, bbox_inches='tight')
+                messagebox.showinfo("Export", f"Plot saved to:\n{plot_path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save plot:\n{e}")
 
 if __name__ == "__main__":
     # Start the main application window

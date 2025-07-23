@@ -2,3 +2,4 @@ matplotlib
 numpy
 pyvisa
 pyvisa-py
+pandas
